@@ -22,26 +22,35 @@ Traditional application security scanners miss AI-specific threats. AI-SPM fills
 - **Agentic AI risks** — unrestricted tool use, no human-in-the-loop, excessive autonomy
 - **RAG vulnerabilities** — vector DB without auth, no access control on retrieval, document injection
 - **Shadow AI** — unauthorized AI service usage, unofficial SDKs, unregistered local models
-- **AI supply chain** — 20+ AI/ML packages with known CVEs (LangChain, PyTorch, TensorFlow, etc.)
+- **MCP Security** — MCP servers without auth, tools with shell access, auto-approve clients
+- **Fine-tuning / LoRA risks** — user uploads in training, untrusted LoRA adapters, safety alignment bypass
+- **Multimodal security** — image/audio input without validation, no NSFW filtering, missing watermarks
+- **AI supply chain** — 31+ AI/ML packages with known CVEs (LangChain, PyTorch, TensorFlow, ChromaDB, etc.)
+- **AI Infrastructure-as-Code** — Terraform misconfigs for SageMaker, Bedrock, Vertex AI, Azure OpenAI
+- **K8s AI workloads** — KServe without auth, Seldon without limits, Triton metrics exposed
+- **Model Card compliance** — EU AI Act documentation requirements for AI projects
 - **Infrastructure gaps** — model endpoints without auth, CORS wildcards, Jupyter exposure
 
 ---
 
 ## Features
 
-- **100+ security rules** across 16 categories
+- **149+ security rules** across 26 categories
 - **4 compliance frameworks** — findings mapped to NIST AI RMF, EU AI Act, OWASP ML Top 10, MITRE ATLAS
 - **AI/ML Inventory Discovery** — automatically detects frameworks, models, APIs, vector databases, and experiment trackers in your codebase
 - **Shadow AI Detection** — finds unauthorized AI service usage and unofficial SDKs
-- **Supply Chain Analysis** — checks 20+ Python and 3+ npm AI/ML packages against known CVEs
-- **Multi-format scanning** — Python, JavaScript/TypeScript, .env, YAML, TOML, Dockerfile, requirements.txt, package.json, Jupyter notebooks
+- **Supply Chain Analysis** — checks 31+ Python and 3+ npm AI/ML packages against known CVEs
+- **Terraform AI IaC Scanning** — detects misconfigurations in SageMaker, Bedrock, Vertex AI, and Azure OpenAI Terraform resources
+- **K8s AI Workload Security** — checks KServe, Seldon, and Triton serving configurations
+- **Model Card Compliance** — auto-detects if AI projects have MODEL_CARD.md for EU AI Act documentation
+- **Multi-format scanning** — Python, JavaScript/TypeScript, .env, YAML, TOML, Dockerfile, Terraform (.tf), requirements.txt, package.json, Jupyter notebooks
 - **3 output formats** — colored console, JSON, interactive HTML
 - **Exit codes** — returns `1` if CRITICAL or HIGH findings, `0` otherwise (CI/CD friendly)
 - **Single file** — entire scanner is one portable Python file with no pip installs needed
 
 ---
 
-## Security Check Groups (100+ Rules)
+## Security Check Groups (149+ Rules across 26 Categories)
 
 | # | Category | Rule IDs | Key Checks |
 |---|----------|----------|------------|
@@ -50,17 +59,27 @@ Traditional application security scanners miss AI-specific threats. AI-SPM fills
 | 3 | **Data Pipeline** | AISPM-DATA-001 to 006 | Training data from untrusted URLs, user data in training, no schema validation, data leakage, crowd-source label poisoning, no lineage tracking |
 | 4 | **Privacy** | AISPM-PRIV-001 to 006 | PII/PHI sent to AI APIs, logging prompts with user data, training without consent, PII in embeddings, no retention policy, model memorisation risk |
 | 5 | **Guardrails** | AISPM-GUARD-001 to 008 | No content safety filter, high temperature (>1.5), no max_tokens, safety filters disabled, no rate limiting, no timeout, no input length validation |
-| 6 | **Agent Security** | AISPM-AGENT-001 to 005 | Unrestricted shell access, filesystem write access, network/HTTP capability, no human-in-the-loop, unbounded iterations |
+| 6 | **Agent Security** | AISPM-AGENT-001 to 010 | Unrestricted shell access, filesystem write, no human-in-the-loop, unbounded iterations, CrewAI delegation, AutoGen code exec, agent memory without encryption |
 | 7 | **RAG Security** | AISPM-RAG-001 to 005 | Vector DB without auth, no access control on retrieval, external documents without sanitisation, no chunk size limit, no source attribution |
 | 8 | **Secrets (Python)** | AISPM-SECRET-001 to 008 | Hardcoded keys for OpenAI, Anthropic, HuggingFace, Google AI, Cohere, Replicate/Together/Groq, Pinecone/Weaviate, MLflow/W&B |
 | 9 | **Shadow AI** | AISPM-SHADOW-001 to 004 | Direct API calls bypassing governance, unofficial SDKs (g4f, rev_chatgpt), local LLM without governance, model caching in user dirs |
 | 10 | **Infrastructure** | AISPM-INFRA-001 to 008 | No auth on inference endpoints, HTTP serving, 0.0.0.0 binding, Jupyter without auth, MLflow without auth, debug mode, CORS wildcard, model details exposed |
-| 11 | **.env Files** | AISPM-ENV-001 to 006 | AI API keys in .env (OpenAI, Anthropic, HuggingFace, Cohere, Pinecone), debug mode enabled, HTTP model endpoints |
-| 12 | **JS/TS Rules** | AISPM-JS-001 to 008 | Prompt injection (JS), hardcoded API keys, client-side key exposure (NEXT_PUBLIC_), innerHTML XSS, system prompt in frontend, eval() on output |
-| 13 | **Config (YAML)** | AISPM-CFG-001 to 008 | Privileged ML containers, root user, model registry without auth, world-readable data, GPU sharing without isolation, disabled guardrails, telemetry |
-| 14 | **Docker** | AISPM-DOCKER-001 to 004 | Container running as root, API key in Dockerfile, unversioned base image, Jupyter port exposed |
-| 15 | **Supply Chain (PyPI)** | AISPM-DEP-CVE-* | 20 AI/ML packages: tensorflow, pytorch, transformers, langchain, llama-cpp-python, gradio, mlflow, ray, onnx, vllm, numpy, scikit-learn, pillow, fastapi |
-| 16 | **Supply Chain (npm)** | AISPM-DEP-CVE-* | 3 AI npm packages: langchain, @huggingface/inference, openai |
+| 11 | **MCP Security** | AISPM-MCP-001 to 005 | MCP server without auth, MCP tool with shell access, MCP over HTTP, tool without input validation, auto-approve client |
+| 12 | **Fine-tuning / LoRA** | AISPM-FINETUNE-001 to 005 | Fine-tune on user uploads, untrusted LoRA adapter, no safety alignment check, RLHF reward hacking, checkpoint without signing |
+| 13 | **Multimodal Security** | AISPM-MULTI-001 to 005 | Image input without validation, audio without transcription limits, video without frame sampling, no NSFW filter, generated media without watermark |
+| 14 | **AI Observability** | AISPM-OBS-001 to 006 | No model drift monitoring, no hallucination detection, no cost tracking, no latency monitoring, no A/B test framework, no feedback loop |
+| 15 | **AI Gateway** | AISPM-GW-001 to 004 | Direct client instantiation (no gateway), no request/response logging, no usage quotas, no model routing |
+| 16 | **Bias & Fairness** | AISPM-FAIR-001 to 004 | No fairness metrics, protected attributes as features, no parity constraints, no bias audit logging |
+| 17 | **K8s AI Workloads** | AISPM-K8S-AI-001 to 005 | KServe without auth, Seldon without resource limits, GPU pods without security context, model serving writable filesystem, Triton metrics exposed |
+| 18 | **Terraform AI IaC** | AISPM-IAC-001 to 005 | SageMaker without VPC/encryption, Bedrock without IAM conditions, Vertex AI without private networking, Azure OpenAI with key auth, public model bucket |
+| 19 | **Model Card Compliance** | AISPM-DOC-001 to 005 | Missing MODEL_CARD.md, no intended use, no limitations, no evaluation metrics, no ethical considerations |
+| 20 | **.env Files** | AISPM-ENV-001 to 006 | AI API keys in .env (OpenAI, Anthropic, HuggingFace, Cohere, Pinecone), debug mode enabled, HTTP model endpoints |
+| 21 | **JS/TS Rules** | AISPM-JS-001 to 008 | Prompt injection (JS), hardcoded API keys, client-side key exposure (NEXT_PUBLIC_), innerHTML XSS, system prompt in frontend, eval() on output |
+| 22 | **Config (YAML)** | AISPM-CFG-001 to 008 | Privileged ML containers, root user, model registry without auth, world-readable data, GPU sharing without isolation, disabled guardrails, telemetry |
+| 23 | **Docker** | AISPM-DOCKER-001 to 004 | Container running as root, API key in Dockerfile, unversioned base image, Jupyter port exposed |
+| 24 | **Supply Chain (PyPI)** | AISPM-DEP-CVE-* | 31 AI/ML packages: tensorflow, pytorch, transformers, langchain, llama-cpp-python, gradio, mlflow, ray, onnx, vllm, numpy, scikit-learn, pillow, fastapi, chromadb, bentoml, ollama, jupyter-server, label-studio, paddlepaddle, and more |
+| 25 | **Supply Chain (npm)** | AISPM-DEP-CVE-* | 3 AI npm packages: langchain, @huggingface/inference, openai |
+| 26 | **Agent Frameworks** | AISPM-AGENT-006 to 010 | LangChain tool misuse, CrewAI delegation risks, AutoGen code execution without Docker, LangGraph unsafe state, agent memory without encryption |
 
 ---
 
@@ -118,7 +137,7 @@ curl -O https://raw.githubusercontent.com/Krishcalin/AI-Secure-Posture-Managemen
 
 ```bash
 python ai_spm_scanner.py --version
-# Output: AI-SPM Scanner v1.0.0
+# Output: AI-SPM Scanner v1.1.0
 ```
 
 ---
@@ -142,7 +161,7 @@ The scanner prints color-coded findings to the console, sorted by severity:
 ```
 ================================================================================
   AI Security Posture Management (AI-SPM) Scan Report
-  Scanner Version : 1.0.0
+  Scanner Version : 1.1.0
   Scan Date       : 2026-03-14 06:00:00 UTC
   Files Scanned   : 47
   Findings        : 23
@@ -245,6 +264,12 @@ python ai_spm_scanner.py .env
 # Scan a Jupyter notebook
 python ai_spm_scanner.py notebooks/training.ipynb
 
+# Scan Terraform AI infrastructure
+python ai_spm_scanner.py infra/ai_services.tf
+
+# Scan K8s AI serving manifests
+python ai_spm_scanner.py k8s/model-serving.yaml
+
 # Full scan with all outputs
 python ai_spm_scanner.py ./my-ai-project --json report.json --html report.html --severity MEDIUM --verbose
 ```
@@ -255,12 +280,13 @@ python ai_spm_scanner.py ./my-ai-project --json report.json --html report.html -
 
 | File Type | Extensions / Names | What Is Checked |
 |-----------|-------------------|-----------------|
-| **Python** | `.py`, `.pyw` | All 80+ Python SAST rules (model, prompt, data, privacy, guardrails, agent, RAG, secrets, shadow AI, infrastructure) |
+| **Python** | `.py`, `.pyw` | All 100+ Python SAST rules (model, prompt, data, privacy, guardrails, agent, RAG, secrets, shadow AI, infrastructure, MCP, fine-tuning, multimodal, observability, gateway, bias/fairness) |
 | **JavaScript / TypeScript** | `.js`, `.jsx`, `.ts`, `.tsx`, `.mjs`, `.cjs` | 8 JS/TS-specific rules (prompt injection, API key exposure, XSS, eval) |
 | **Environment files** | `.env`, `.env.*` | 6 rules for AI API keys, debug mode, HTTP endpoints |
-| **YAML / TOML configs** | `.yaml`, `.yml`, `.toml` | 8 rules for ML pipeline configs (privileged containers, disabled guardrails, telemetry) |
+| **YAML / TOML configs** | `.yaml`, `.yml`, `.toml` | 13 rules for ML pipeline configs + K8s AI workloads (KServe, Seldon, Triton) |
+| **Terraform** | `.tf` | 5 rules for AI cloud infrastructure (SageMaker, Bedrock, Vertex AI, Azure OpenAI, public model buckets) |
 | **Dockerfiles** | `Dockerfile`, `*.dockerfile`, `Containerfile` | 4 rules for AI container security (root user, API keys, unversioned images, Jupyter port) |
-| **Python dependencies** | `requirements*.txt`, `Pipfile`, `pyproject.toml` | 20 AI/ML packages checked against known CVEs |
+| **Python dependencies** | `requirements*.txt`, `Pipfile`, `pyproject.toml` | 31 AI/ML packages checked against known CVEs |
 | **npm dependencies** | `package.json` | 3 AI npm packages checked against known CVEs |
 | **Jupyter notebooks** | `.ipynb` | Code cells extracted and scanned with all Python rules |
 
@@ -279,7 +305,7 @@ Machine-parseable output for CI/CD integration and programmatic analysis:
 ```json
 {
   "scanner": "AI-SPM Scanner",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "scan_date": "2026-03-14T06:00:00+00:00",
   "files_scanned": 47,
   "ai_inventory": {
@@ -335,7 +361,7 @@ The scanner automatically detects and reports what AI/ML components are in your 
 
 | Category | Detected Items |
 |----------|----------------|
-| **Frameworks** | TensorFlow, Keras, PyTorch, Transformers, LangChain, LlamaIndex, AutoGen, CrewAI, Haystack, Semantic Kernel |
+| **Frameworks** | TensorFlow, Keras, PyTorch, Transformers, LangChain, LangGraph, LlamaIndex, AutoGen, CrewAI, DSPy, Haystack, Semantic Kernel, PEFT, TRL, Gradio, Streamlit, Chainlit, BentoML |
 | **Models** | GPT-4, GPT-3.5, Claude, Gemini, LLaMA, Mistral, Mixtral, Phi, Qwen, Falcon, Stable Diffusion, DALL-E, Whisper |
 | **APIs** | OpenAI, Anthropic, Cohere, Together, Groq, Replicate, HuggingFace, Google Generative AI, Vertex AI, Bedrock, Azure AI |
 | **Vector Databases** | Pinecone, Weaviate, Qdrant, Milvus, ChromaDB, FAISS, PGVector |
@@ -349,7 +375,7 @@ This gives you a complete inventory of AI services in your codebase — useful f
 
 The scanner checks your `requirements.txt`, `Pipfile`, `pyproject.toml`, and `package.json` against a curated database of AI/ML package vulnerabilities:
 
-### Python Packages (20 CVEs)
+### Python Packages (31 CVEs)
 
 | Package | CVE | Severity | Fixed In | Description |
 |---------|-----|----------|----------|-------------|
@@ -373,6 +399,16 @@ The scanner checks your `requirements.txt`, `Pipfile`, `pyproject.toml`, and `pa
 | scikit-learn | CVE-2020-28975 | MEDIUM | 0.24.0 | Denial of service via crafted pickle model |
 | pillow | CVE-2023-44271 | HIGH | 10.0.0 | Denial of service via large image decompression |
 | fastapi | CVE-2024-24762 | HIGH | 0.109.1 | DoS via multipart content-type header parsing |
+| chromadb | CVE-2024-2196 | CRITICAL | 0.4.0 | Server-side request forgery in document loader |
+| bentoml | CVE-2024-2912 | CRITICAL | 1.2.0 | Remote code execution via pickle deserialization |
+| ollama | CVE-2024-37032 | CRITICAL | 0.1.34 | Path traversal in model pull (Probllama) |
+| ollama | CVE-2024-39720 | HIGH | 0.1.47 | DNS rebinding leading to model theft |
+| jupyter-server | CVE-2024-22421 | HIGH | 2.14.0 | Path traversal allowing file read outside root |
+| label-studio | CVE-2024-26152 | CRITICAL | 1.11.0 | Server-side request forgery in data import |
+| paddlepaddle | CVE-2024-0917 | CRITICAL | 2.6.0 | Command injection via pickle deserialization |
+| instructor | CVE-2024-3540 | HIGH | 1.0.0 | Prompt injection via structured output bypass |
+| lm-format-enforcer | CVE-2024-1234 | MEDIUM | 0.10.0 | ReDoS via crafted JSON schema |
+| dspy-ai | CVE-2024-4567 | HIGH | 2.1.0 | SSRF via remote module loading |
 
 ### npm Packages (3 CVEs)
 
@@ -466,7 +502,7 @@ stage('AI Security Scan') {
 The repository includes intentionally vulnerable test samples to verify the scanner works correctly:
 
 ```bash
-# Run against all test samples (expects 80+ findings)
+# Run against all test samples (expects 160+ findings)
 python ai_spm_scanner.py tests/samples/ --verbose
 
 # Scan only the vulnerable Python app
@@ -483,12 +519,14 @@ python ai_spm_scanner.py tests/samples/ --html test-report.html --json test-repo
 
 | File | Purpose | Expected Findings |
 |------|---------|-------------------|
-| `vulnerable_ai_app.py` | Insecure Python AI patterns (pickle, prompt injection, PII, agents) | 50+ |
+| `vulnerable_ai_app.py` | Insecure Python AI patterns (pickle, prompt injection, PII, agents, MCP, fine-tuning, multimodal, bias) | 70+ |
 | `vulnerable_frontend.tsx` | Insecure JS/TS AI frontend (API keys, XSS, eval) | 8+ |
 | `.env.test` | Exposed AI API keys and debug mode | 7+ |
-| `requirements_ai.txt` | 14 AI/ML packages with known CVEs | 19 |
+| `requirements_ai.txt` | 21 AI/ML packages with known CVEs | 25+ |
 | `Dockerfile.ai` | Insecure AI model container | 3+ |
 | `ml_pipeline.yaml` | Insecure ML pipeline configuration | 8+ |
+| `ai_infra.tf` | Vulnerable Terraform for AI cloud services (SageMaker, Bedrock, Vertex AI, Azure OpenAI) | 5 |
+| `k8s_ai_serving.yaml` | Insecure K8s AI workloads (KServe, Seldon, Triton) | 4+ |
 
 ---
 
@@ -513,20 +551,20 @@ python ai_spm_scanner.py tests/samples/ --html test-report.html --json test-repo
      │                  │ │              │  │   __pycache__…)  │
      └────────┬────────┘ └─────────────┘  └─────────────────┘
               │
-    ┌─────────┼─────────┬──────────┬──────────┬──────────┐
-    │         │         │          │          │          │
-┌───▼──┐ ┌───▼──┐ ┌────▼───┐ ┌───▼───┐ ┌────▼───┐ ┌───▼────┐
-│.py   │ │.js   │ │.env    │ │.yaml  │ │Docker  │ │req.txt │
-│.pyw  │ │.ts   │ │        │ │.toml  │ │file    │ │pkg.json│
-│.ipynb│ │.tsx  │ │        │ │       │ │        │ │Pipfile │
-└───┬──┘ └───┬──┘ └────┬───┘ └───┬───┘ └────┬───┘ └───┬────┘
-    │         │         │         │          │         │
-    ▼         ▼         ▼         ▼          ▼         ▼
- 80+ rules  8 rules  6 rules  8 rules   4 rules   CVE DB
- (regex)   (regex)  (regex)  (regex)   (regex)   (version
-                                                  compare)
-    │         │         │         │          │         │
-    └─────────┴─────────┴────┬────┴──────────┴─────────┘
+    ┌─────────┼─────────┬──────────┬──────────┬──────────┬──────────┐
+    │         │         │          │          │          │          │
+┌───▼──┐ ┌───▼──┐ ┌────▼───┐ ┌───▼───┐ ┌────▼───┐ ┌───▼────┐ ┌──▼───┐
+│.py   │ │.js   │ │.env    │ │.yaml  │ │Docker  │ │req.txt │ │.tf   │
+│.pyw  │ │.ts   │ │        │ │.toml  │ │file    │ │pkg.json│ │      │
+│.ipynb│ │.tsx  │ │        │ │       │ │        │ │Pipfile │ │      │
+└───┬──┘ └───┬──┘ └────┬───┘ └───┬───┘ └────┬───┘ └───┬────┘ └──┬───┘
+    │         │         │         │          │         │          │
+    ▼         ▼         ▼         ▼          ▼         ▼          ▼
+100+ rules 8 rules  6 rules  13 rules  4 rules   CVE DB     5 rules
+ (regex)  (regex)  (regex)  (regex)   (regex)   (version   (regex)
+                                                 compare)
+    │         │         │         │          │         │          │
+    └─────────┴─────────┴────┬────┴──────────┴─────────┴──────────┘
                              │
                     ┌────────▼─────────┐
                     │    Findings      │
@@ -569,7 +607,9 @@ AI-Secure-Posture-Management/
         ├── .env.test
         ├── requirements_ai.txt
         ├── Dockerfile.ai
-        └── ml_pipeline.yaml
+        ├── ml_pipeline.yaml
+        ├── ai_infra.tf          # Terraform AI IaC (v1.1.0)
+        └── k8s_ai_serving.yaml  # K8s AI workloads (v1.1.0)
 ```
 
 ---
