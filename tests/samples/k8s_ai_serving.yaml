@@ -1,0 +1,55 @@
+# Intentionally vulnerable K8s AI workload configs for AI-SPM v1.1.0 testing
+
+# AISPM-K8S-AI-001: KServe without auth
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: llm-predictor
+spec:
+  predictor:
+    containers:
+      - name: model
+        image: myregistry/llm:latest
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+---
+# AISPM-K8S-AI-002: Seldon without resource limits
+apiVersion: machinelearning.seldon.io/v1
+kind: SeldonDeployment
+metadata:
+  name: classifier
+spec:
+  predictors:
+    - graph:
+        name: model
+        implementation: SKLEARN_SERVER
+---
+# AISPM-K8S-AI-004: Model serving writable filesystem
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: triton-server
+spec:
+  template:
+    spec:
+      containers:
+        - name: triton
+          image: nvcr.io/nvidia/tritonserver:latest
+          ports:
+            - containerPort: 8000
+            - containerPort: 8002
+          resources:
+            limits:
+              nvidia.com/gpu: 2
+---
+# AISPM-K8S-AI-005: Triton metrics exposed via LoadBalancer
+apiVersion: v1
+kind: Service
+metadata:
+  name: triton-metrics
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 8002
+      name: triton-metrics

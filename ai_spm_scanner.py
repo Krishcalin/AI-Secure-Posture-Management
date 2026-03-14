@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AI Security Posture Management (AI-SPM) Scanner v1.0.0
+AI Security Posture Management (AI-SPM) Scanner v1.1.0
 
 A comprehensive static-analysis scanner for AI/ML projects that identifies
 security misconfigurations, vulnerabilities, and compliance gaps across the
@@ -19,6 +19,15 @@ Coverage areas:
   - Infrastructure         (model serving, endpoints, Jupyter exposure)
   - Supply Chain           (vulnerable AI/ML packages with CVEs)
   - Shadow AI              (unauthorised AI service usage)
+  - MCP Security           (Model Context Protocol server/transport security)
+  - Fine-tuning Security   (LoRA/QLoRA, adapter injection, alignment)
+  - Multimodal Security    (vision/audio input validation, deepfake controls)
+  - AI Observability       (drift detection, hallucination, cost monitoring)
+  - AI Gateway             (centralised API management, key rotation)
+  - AI Bias & Fairness     (fairness evaluation, protected attributes)
+  - K8s AI Workloads       (KServe, Seldon, Triton, GPU pod security)
+  - Terraform IaC for AI   (SageMaker, Bedrock, Vertex AI misconfigs)
+  - Model Card Compliance  (EU AI Act documentation requirements)
   - Compliance mapping     (NIST AI RMF, EU AI Act, OWASP ML Top 10, MITRE ATLAS)
 
 Usage:
@@ -40,7 +49,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 # ---------------------------------------------------------------------------
 # COMPLIANCE FRAMEWORK MAPPING
@@ -697,6 +706,412 @@ INFRA_RULES: list[dict[str, Any]] = [
 ]
 
 # ---------------------------------------------------------------------------
+# PYTHON SAST RULES — MCP (MODEL CONTEXT PROTOCOL) SECURITY  [v1.1.0]
+# ---------------------------------------------------------------------------
+MCP_SECURITY_RULES: list[dict[str, Any]] = [
+    {
+        "id": "AISPM-MCP-001", "category": "MCP Security", "severity": "CRITICAL",
+        "name": "MCP server without authentication",
+        "pattern": r"""(?:mcp\.Server|McpServer|MCPServer|mcp_server)\s*\([^)]*(?!.*(?:auth|token|api_key|authenticate|credentials))[^)]*\)""",
+        "description": "MCP server instantiated without authentication allows any client to invoke tools and access resources.",
+        "cwe": "CWE-306", "recommendation": "Implement authentication on MCP servers using API keys, OAuth tokens, or mTLS.",
+        "compliance": ["NIST-AI-RMF-MANAGE", "ATLAS-INIT-ACCESS", "EU-AI-ACT-HIGH"],
+    },
+    {
+        "id": "AISPM-MCP-002", "category": "MCP Security", "severity": "HIGH",
+        "name": "MCP tool with filesystem or shell access",
+        "pattern": r"""(?:@(?:mcp\.)?tool|add_tool|register_tool)\s*.*(?:read_file|write_file|exec|shell|subprocess|os\.system|run_command|bash|terminal|file_system)""",
+        "description": "MCP tool registered with filesystem or shell access can be exploited by prompt injection to execute arbitrary commands.",
+        "cwe": "CWE-78", "recommendation": "Sandbox MCP tools. Restrict filesystem access to specific directories. Require user confirmation for destructive operations.",
+        "compliance": ["EU-AI-ACT-HIGH", "NIST-AI-RMF-MANAGE", "ATLAS-EXEC"],
+    },
+    {
+        "id": "AISPM-MCP-003", "category": "MCP Security", "severity": "HIGH",
+        "name": "MCP transport over HTTP (not HTTPS/stdio)",
+        "pattern": r"""(?:SSEServerTransport|HttpTransport|sse_transport)\s*\([^)]*(?:http://|port\s*=)""",
+        "description": "MCP server using HTTP transport exposes tool calls and responses to network interception.",
+        "cwe": "CWE-319", "recommendation": "Use stdio transport for local connections or HTTPS/SSE with TLS for remote MCP servers.",
+        "compliance": ["NIST-AI-RMF-MANAGE"],
+    },
+    {
+        "id": "AISPM-MCP-004", "category": "MCP Security", "severity": "HIGH",
+        "name": "MCP resource exposing sensitive data without access control",
+        "pattern": r"""(?:@(?:mcp\.)?resource|add_resource|register_resource)\s*.*(?:database|db|credential|secret|password|config|env|key|token|private)""",
+        "description": "MCP resource handler exposing sensitive data (credentials, databases) without access control.",
+        "cwe": "CWE-862", "recommendation": "Implement per-resource access controls. Never expose credentials or secrets as MCP resources.",
+        "compliance": ["NIST-AI-RMF-MANAGE", "EU-AI-ACT-HIGH"],
+    },
+    {
+        "id": "AISPM-MCP-005", "category": "MCP Security", "severity": "MEDIUM",
+        "name": "MCP client with auto-approve / no confirmation flow",
+        "pattern": r"""(?:mcp|McpClient|MCPClient|mcp_client).*(?:auto_approve|confirm\s*=\s*False|approval\s*=\s*False|interactive\s*=\s*False)""",
+        "description": "MCP client configured to auto-approve tool invocations bypasses human-in-the-loop safety.",
+        "cwe": "CWE-862", "recommendation": "Require user confirmation for MCP tool calls, especially for destructive or external-facing operations.",
+        "compliance": ["EU-AI-ACT-HIGH", "NIST-AI-RMF-GOVERN"],
+    },
+]
+
+# ---------------------------------------------------------------------------
+# PYTHON SAST RULES — AGENT FRAMEWORK SPECIFIC  [v1.1.0]
+# ---------------------------------------------------------------------------
+AGENT_FRAMEWORK_RULES: list[dict[str, Any]] = [
+    {
+        "id": "AISPM-AGENT-006", "category": "Agent Security", "severity": "HIGH",
+        "name": "LangChain/LangGraph agent with unrestricted tool list",
+        "pattern": r"""(?:create_(?:react|openai_functions|tool_calling|structured_chat)_agent|AgentExecutor)\s*\([^)]*tools\s*=\s*(?:tools|all_tools|\[.*,.*,.*,.*,)""",
+        "description": "LangChain agent initialised with a broad tool list. Over-provisioned tools increase the blast radius of prompt injection.",
+        "cwe": "CWE-250", "recommendation": "Apply least-privilege: only grant the agent tools required for its specific task. Use separate agents for separate concerns.",
+        "compliance": ["EU-AI-ACT-HIGH", "NIST-AI-RMF-MANAGE", "ATLAS-EXEC"],
+    },
+    {
+        "id": "AISPM-AGENT-007", "category": "Agent Security", "severity": "HIGH",
+        "name": "CrewAI agent with allow_delegation and no role constraint",
+        "pattern": r"""(?:Agent|CrewAgent)\s*\([^)]*allow_delegation\s*=\s*True""",
+        "description": "CrewAI agent with delegation enabled can pass tasks to other agents, potentially escalating privileges.",
+        "cwe": "CWE-269", "recommendation": "Set allow_delegation=False unless explicitly required. Define strict role boundaries for delegating agents.",
+        "compliance": ["EU-AI-ACT-HIGH", "NIST-AI-RMF-MANAGE"],
+    },
+    {
+        "id": "AISPM-AGENT-008", "category": "Agent Security", "severity": "CRITICAL",
+        "name": "AutoGen agent with code execution enabled without Docker",
+        "pattern": r"""code_execution_config\s*=\s*\{[^}]*(?!.*docker)[^}]*\}""",
+        "description": "AutoGen agent with code execution enabled but no Docker sandboxing executes code directly on the host.",
+        "cwe": "CWE-78", "recommendation": "Enable Docker sandboxing: code_execution_config={'use_docker': True}. Never run generated code on the host.",
+        "compliance": ["EU-AI-ACT-HIGH", "NIST-AI-RMF-MANAGE", "ATLAS-EXEC"],
+    },
+    {
+        "id": "AISPM-AGENT-009", "category": "Agent Security", "severity": "MEDIUM",
+        "name": "Multi-agent system without supervisor or orchestrator",
+        "pattern": r"""(?:GroupChat|MultiAgent|agent_team|crew)\s*\([^)]*(?!.*(?:supervisor|orchestrator|manager|admin_agent))[^)]*\)""",
+        "description": "Multi-agent systems without a supervisor agent can exhibit emergent behaviour and coordination failures.",
+        "cwe": "CWE-693", "recommendation": "Implement a supervisor/orchestrator agent to coordinate and audit inter-agent communication.",
+        "compliance": ["EU-AI-ACT-HIGH", "NIST-AI-RMF-GOVERN"],
+    },
+    {
+        "id": "AISPM-AGENT-010", "category": "Agent Security", "severity": "MEDIUM",
+        "name": "Agent memory persisted without encryption",
+        "pattern": r"""(?:ConversationBufferMemory|memory|chat_memory|agent_memory)\s*\([^)]*(?:persist|save|store|file_path|db_path)(?!.*(?:encrypt|cipher|kms))""",
+        "description": "Agent conversation memory persisted to disk without encryption exposes sensitive interactions.",
+        "cwe": "CWE-311", "recommendation": "Encrypt persisted agent memory at rest. Use KMS or filesystem-level encryption.",
+        "compliance": ["NIST-AI-RMF-MANAGE", "EU-AI-ACT-HIGH"],
+    },
+]
+
+# ---------------------------------------------------------------------------
+# PYTHON SAST RULES — FINE-TUNING / LoRA SECURITY  [v1.1.0]
+# ---------------------------------------------------------------------------
+FINETUNE_SECURITY_RULES: list[dict[str, Any]] = [
+    {
+        "id": "AISPM-FINETUNE-001", "category": "Fine-tuning Security", "severity": "HIGH",
+        "name": "Fine-tuning on unvalidated user-uploaded dataset",
+        "pattern": r"""(?:SFTTrainer|Trainer|fine_tune|finetune)\s*\([^)]*(?:upload|user_file|user_data|request\.files)""",
+        "description": "Fine-tuning on user-uploaded data without validation enables backdoor injection and data poisoning.",
+        "cwe": "CWE-20", "recommendation": "Validate, sanitise, and review all user-uploaded datasets before fine-tuning. Implement data quarantine.",
+        "compliance": ["OWASP-ML-02", "ATLAS-PERSIST", "EU-AI-ACT-HIGH", "NIST-AI-RMF-MAP"],
+    },
+    {
+        "id": "AISPM-FINETUNE-002", "category": "Fine-tuning Security", "severity": "HIGH",
+        "name": "LoRA/QLoRA adapter loaded from untrusted source",
+        "pattern": r"""(?:PeftModel\.from_pretrained|load_adapter|merge_adapter|LoraConfig)\s*\([^)]*(?:http|hub|download|trust_remote_code)""",
+        "description": "Loading LoRA/PEFT adapters from untrusted sources can inject backdoors into the base model.",
+        "cwe": "CWE-829", "recommendation": "Only load adapters from trusted, verified sources. Pin adapter revisions with commit hashes.",
+        "compliance": ["OWASP-ML-06", "ATLAS-PERSIST", "NIST-AI-RMF-MANAGE"],
+    },
+    {
+        "id": "AISPM-FINETUNE-003", "category": "Fine-tuning Security", "severity": "MEDIUM",
+        "name": "No safety evaluation after fine-tuning",
+        "pattern": r"""(?:trainer\.train|\.fine_tune|SFTTrainer\.train)\s*\([^)]*\)(?!.*(?:eval|evaluate|benchmark|safety_check|red_team|test))""",
+        "description": "Fine-tuning without subsequent safety evaluation may degrade the model's safety alignment.",
+        "cwe": "CWE-693", "recommendation": "Run safety benchmarks and red-teaming after every fine-tuning run before deployment.",
+        "compliance": ["EU-AI-ACT-HIGH", "NIST-AI-RMF-MEASURE"],
+    },
+    {
+        "id": "AISPM-FINETUNE-004", "category": "Fine-tuning Security", "severity": "MEDIUM",
+        "name": "RLHF reward model without adversarial testing",
+        "pattern": r"""(?:RewardModel|reward_model|PPOTrainer|DPOTrainer|RLHFTrainer)\s*\(""",
+        "description": "RLHF/DPO reward models without adversarial testing can be gamed to produce harmful outputs.",
+        "cwe": "CWE-693", "recommendation": "Adversarially test reward models. Implement reward hacking detection and output monitoring.",
+        "compliance": ["EU-AI-ACT-HIGH", "NIST-AI-RMF-MEASURE", "OWASP-ML-08"],
+    },
+    {
+        "id": "AISPM-FINETUNE-005", "category": "Fine-tuning Security", "severity": "HIGH",
+        "name": "Full model weights fine-tuned without freezing safety layers",
+        "pattern": r"""(?:model\.train\(\)|\.requires_grad\s*=\s*True|freeze\s*=\s*False|trainable\s*=\s*True).*(?:all|full|entire)""",
+        "description": "Full-weight fine-tuning without freezing safety-critical layers can destroy pre-trained safety alignment.",
+        "cwe": "CWE-693", "recommendation": "Use parameter-efficient fine-tuning (LoRA/QLoRA). Freeze safety-aligned layers. Compare pre/post safety benchmarks.",
+        "compliance": ["EU-AI-ACT-HIGH", "NIST-AI-RMF-MANAGE", "ATLAS-PERSIST"],
+    },
+]
+
+# ---------------------------------------------------------------------------
+# PYTHON SAST RULES — MULTIMODAL SECURITY  [v1.1.0]
+# ---------------------------------------------------------------------------
+MULTIMODAL_SECURITY_RULES: list[dict[str, Any]] = [
+    {
+        "id": "AISPM-MULTI-001", "category": "Multimodal Security", "severity": "MEDIUM",
+        "name": "Image input without size or format validation",
+        "pattern": r"""(?:Image\.open|cv2\.imread|imageio\.imread|vision|image_input)\s*\([^)]*(?:request|upload|user_|url|http)(?!.*(?:validate|check|verify|max_size|format))""",
+        "description": "Processing user-uploaded images without size/format validation enables adversarial image attacks and resource exhaustion.",
+        "cwe": "CWE-20", "recommendation": "Validate image dimensions, file size, format, and pixel values before model inference.",
+        "compliance": ["OWASP-ML-01", "NIST-AI-RMF-MANAGE"],
+    },
+    {
+        "id": "AISPM-MULTI-002", "category": "Multimodal Security", "severity": "HIGH",
+        "name": "Audio transcription output used in commands",
+        "pattern": r"""(?:whisper|transcribe|speech_to_text|stt|recognize)\s*\([^)]*\).*(?:os\.system|subprocess|exec|eval|cursor\.execute)""",
+        "description": "Using speech-to-text output directly in commands enables injection via adversarial audio.",
+        "cwe": "CWE-78", "recommendation": "Validate and sanitise all transcription output before use in commands or queries.",
+        "compliance": ["OWASP-ML-01", "ATLAS-EXEC", "NIST-AI-RMF-MANAGE"],
+    },
+    {
+        "id": "AISPM-MULTI-003", "category": "Multimodal Security", "severity": "HIGH",
+        "name": "OCR/vision output concatenated into LLM prompt",
+        "pattern": r"""(?:ocr|extract_text|image_to_text|vision|describe_image)\s*\([^)]*\).*(?:prompt|messages|content)\s*(?:\+|\.format|f['\"])""",
+        "description": "Injecting OCR/vision model output into LLM prompts enables indirect prompt injection via images.",
+        "cwe": "CWE-74", "recommendation": "Treat vision/OCR output as untrusted input. Sanitise and clearly delimit from system instructions.",
+        "compliance": ["OWASP-ML-01", "ATLAS-INIT-ACCESS", "EU-AI-ACT-HIGH"],
+    },
+    {
+        "id": "AISPM-MULTI-004", "category": "Multimodal Security", "severity": "HIGH",
+        "name": "No NSFW/content filter on image generation",
+        "pattern": r"""(?:StableDiffusion|DALL|image_generate|text_to_image|generate_image)\s*\([^)]*(?!.*(?:safety_checker|nsfw|content_filter|moderation))""",
+        "description": "Image generation without NSFW/content filtering can produce harmful, illegal, or explicit content.",
+        "cwe": "CWE-693", "recommendation": "Enable safety checkers on all image generation pipelines. Implement content moderation on outputs.",
+        "compliance": ["EU-AI-ACT-HIGH", "NIST-AI-RMF-MANAGE", "ATLAS-IMPACT"],
+    },
+    {
+        "id": "AISPM-MULTI-005", "category": "Multimodal Security", "severity": "MEDIUM",
+        "name": "Generated media without watermarking or provenance",
+        "pattern": r"""(?:generate|create|synthesize)\s*\([^)]*(?:image|video|audio|speech|voice)(?!.*(?:watermark|provenance|c2pa|metadata|signature))""",
+        "description": "AI-generated media without watermarking or provenance metadata aids deepfake creation and misinformation.",
+        "cwe": "CWE-451", "recommendation": "Add C2PA/watermarks to all AI-generated media. Include provenance metadata for traceability.",
+        "compliance": ["EU-AI-ACT-LIMITED", "NIST-AI-RMF-GOVERN"],
+    },
+]
+
+# ---------------------------------------------------------------------------
+# PYTHON SAST RULES — AI OBSERVABILITY & MONITORING  [v1.1.0]
+# ---------------------------------------------------------------------------
+OBSERVABILITY_RULES: list[dict[str, Any]] = [
+    {
+        "id": "AISPM-OBS-001", "category": "AI Observability", "severity": "MEDIUM",
+        "name": "No AI request/response logging configured",
+        "pattern": r"""(?:openai|anthropic|client)\.\w+\.\w+\([^)]*\)(?!.*(?:log|trace|span|monitor|observe|callback|langsmith|langfuse|helicone))""",
+        "description": "AI API calls without observability make it impossible to detect misuse, debug issues, or audit behaviour.",
+        "cwe": "CWE-778", "recommendation": "Implement AI observability with LangSmith, Langfuse, Helicone, or custom logging.",
+        "compliance": ["NIST-AI-RMF-MEASURE", "EU-AI-ACT-HIGH"],
+    },
+    {
+        "id": "AISPM-OBS-002", "category": "AI Observability", "severity": "MEDIUM",
+        "name": "No model drift detection mechanism",
+        "pattern": r"""(?:model\.predict|pipeline\(|\.generate)\s*\([^)]*\)(?!.*(?:drift|monitor|evidently|whylogs|nannyml|fiddler))""",
+        "description": "Production model inference without drift detection can silently degrade in accuracy over time.",
+        "cwe": "CWE-693", "recommendation": "Implement data/concept drift detection using Evidently, WhyLogs, NannyML, or custom monitoring.",
+        "compliance": ["NIST-AI-RMF-MEASURE", "EU-AI-ACT-HIGH"],
+    },
+    {
+        "id": "AISPM-OBS-003", "category": "AI Observability", "severity": "HIGH",
+        "name": "No hallucination detection or grounding check",
+        "pattern": r"""(?:\.create|\.generate|\.completions)\s*\([^)]*\).*(?:return|response)(?!.*(?:ground|verify|fact_check|hallucination|citation|source))""",
+        "description": "LLM responses used without hallucination detection can propagate false information to users.",
+        "cwe": "CWE-693", "recommendation": "Implement grounding checks, source citation, or hallucination detection on LLM outputs.",
+        "compliance": ["EU-AI-ACT-HIGH", "NIST-AI-RMF-MEASURE", "OWASP-ML-09"],
+    },
+    {
+        "id": "AISPM-OBS-004", "category": "AI Observability", "severity": "MEDIUM",
+        "name": "No cost monitoring or alerting on AI API usage",
+        "pattern": r"""(?:openai|anthropic|cohere)\.\w+\.\w+\([^)]*\)(?!.*(?:cost|budget|usage|billing|quota|limit|meter))""",
+        "description": "AI API calls without cost monitoring can lead to unexpected bills from abuse or runaway loops.",
+        "cwe": "CWE-770", "recommendation": "Implement cost tracking, usage alerts, and budget limits on all AI API consumption.",
+        "compliance": ["NIST-AI-RMF-MANAGE"],
+    },
+    {
+        "id": "AISPM-OBS-005", "category": "AI Observability", "severity": "LOW",
+        "name": "No A/B testing safeguards for model rollouts",
+        "pattern": r"""(?:model_version|model_id|deployment)\s*=\s*.*(?:new|v2|beta|canary|experiment)(?!.*(?:rollback|feature_flag|percentage|gradual))""",
+        "description": "Model version updates without A/B testing or gradual rollout risk production failures.",
+        "cwe": "CWE-693", "recommendation": "Implement canary deployments and A/B testing for model updates. Maintain rollback capability.",
+        "compliance": ["NIST-AI-RMF-MANAGE"],
+    },
+    {
+        "id": "AISPM-OBS-006", "category": "AI Observability", "severity": "LOW",
+        "name": "No AI incident response plan referenced",
+        "pattern": r"""(?:deploy|production|release|serve).*(?:model|ai|llm|ml)(?!.*(?:incident|runbook|playbook|escalation|rollback|circuit_breaker))""",
+        "description": "AI system deployment without referencing an incident response plan for AI-specific failures.",
+        "cwe": "CWE-778", "recommendation": "Document AI incident response procedures including model rollback, fallback behaviour, and escalation.",
+        "compliance": ["NIST-AI-RMF-GOVERN", "EU-AI-ACT-HIGH"],
+    },
+]
+
+# ---------------------------------------------------------------------------
+# PYTHON SAST RULES — AI GATEWAY / PROXY SECURITY  [v1.1.0]
+# ---------------------------------------------------------------------------
+GATEWAY_RULES: list[dict[str, Any]] = [
+    {
+        "id": "AISPM-GW-001", "category": "AI Gateway", "severity": "MEDIUM",
+        "name": "Direct AI API call without gateway or proxy",
+        "pattern": r"""(?:openai\.(?:Client|OpenAI)|anthropic\.(?:Client|Anthropic)|Cohere)\s*\(\s*(?:api_key|$)""",
+        "description": "Direct AI SDK client instantiation bypasses centralised gateway controls (rate limiting, logging, content filtering).",
+        "cwe": "CWE-284", "recommendation": "Route AI API calls through a centralised AI gateway (LiteLLM, Portkey, Helicone) for governance.",
+        "compliance": ["NIST-AI-RMF-GOVERN", "EU-AI-ACT-HIGH"],
+    },
+    {
+        "id": "AISPM-GW-002", "category": "AI Gateway", "severity": "MEDIUM",
+        "name": "No centralised API key rotation mechanism",
+        "pattern": r"""(?:api_key|OPENAI_API_KEY|ANTHROPIC_API_KEY)\s*=\s*(?:os\.environ|os\.getenv)\s*\([^)]*\)(?!.*(?:rotate|vault|secrets_manager|kms|refresh))""",
+        "description": "AI API keys loaded from environment without rotation mechanism risk prolonged exposure if leaked.",
+        "cwe": "CWE-798", "recommendation": "Use secrets managers with automatic rotation (Vault, AWS Secrets Manager). Implement key rotation policies.",
+        "compliance": ["NIST-AI-RMF-GOVERN"],
+    },
+    {
+        "id": "AISPM-GW-003", "category": "AI Gateway", "severity": "HIGH",
+        "name": "No content inspection on AI request/response",
+        "pattern": r"""(?:openai|anthropic|client)\.\w+\.\w+\([^)]*\)(?!.*(?:guardrail|moderate|inspect|filter|scan|check_content|pii_detect))""",
+        "description": "AI API calls without content inspection allow PII leakage, prompt injection, and policy violations.",
+        "cwe": "CWE-20", "recommendation": "Implement content inspection at the AI gateway layer for both requests and responses.",
+        "compliance": ["EU-AI-ACT-HIGH", "NIST-AI-RMF-MANAGE"],
+    },
+    {
+        "id": "AISPM-GW-004", "category": "AI Gateway", "severity": "MEDIUM",
+        "name": "No per-user or per-team AI usage quotas",
+        "pattern": r"""(?:openai|anthropic|client)\.\w+\.\w+\([^)]*\)(?!.*(?:quota|limit|budget|user_id|team_id|tenant))""",
+        "description": "AI API calls without per-user/team quotas allow a single user to exhaust the organisation's AI budget.",
+        "cwe": "CWE-770", "recommendation": "Implement per-user and per-team usage quotas and rate limits at the AI gateway.",
+        "compliance": ["NIST-AI-RMF-MANAGE"],
+    },
+]
+
+# ---------------------------------------------------------------------------
+# PYTHON SAST RULES — AI BIAS & FAIRNESS  [v1.1.0]
+# ---------------------------------------------------------------------------
+BIAS_FAIRNESS_RULES: list[dict[str, Any]] = [
+    {
+        "id": "AISPM-FAIR-001", "category": "Bias & Fairness", "severity": "MEDIUM",
+        "name": "No fairness evaluation in training pipeline",
+        "pattern": r"""(?:\.fit|trainer\.train|model\.train)\s*\([^)]*\)(?!.*(?:fairness|bias|equalized_odds|demographic_parity|fairlearn|aequitas|aif360))""",
+        "description": "Model training without fairness evaluation may produce biased outcomes affecting protected groups.",
+        "cwe": "CWE-693", "recommendation": "Integrate fairness evaluation (Fairlearn, AIF360, Aequitas) into the training pipeline.",
+        "compliance": ["EU-AI-ACT-HIGH", "NIST-AI-RMF-MAP", "NIST-AI-RMF-MEASURE"],
+    },
+    {
+        "id": "AISPM-FAIR-002", "category": "Bias & Fairness", "severity": "HIGH",
+        "name": "Protected attributes used as direct model features",
+        "pattern": r"""(?:features|columns|input_columns|feature_names)\s*(?:=|\[).*(?:race|gender|sex|ethnicity|religion|disability|age|nationality|sexual_orientation)""",
+        "description": "Using protected demographic attributes as direct model features can cause discriminatory outcomes.",
+        "cwe": "CWE-693", "recommendation": "Remove protected attributes from direct features. Use fairness-aware algorithms. Document any justified use.",
+        "compliance": ["EU-AI-ACT-HIGH", "NIST-AI-RMF-MAP"],
+    },
+    {
+        "id": "AISPM-FAIR-003", "category": "Bias & Fairness", "severity": "MEDIUM",
+        "name": "No demographic parity or equality testing",
+        "pattern": r"""(?:predict|classify|score|rank)\s*\([^)]*\).*(?:decision|outcome|result)(?!.*(?:parity|equality|disparity|bias_test|group_metric))""",
+        "description": "Model predictions used for decisions without demographic parity testing risk discriminatory impact.",
+        "cwe": "CWE-693", "recommendation": "Test predictions across demographic groups. Measure disparate impact ratios. Document results.",
+        "compliance": ["EU-AI-ACT-HIGH", "NIST-AI-RMF-MEASURE"],
+    },
+    {
+        "id": "AISPM-FAIR-004", "category": "Bias & Fairness", "severity": "LOW",
+        "name": "No bias monitoring in production inference",
+        "pattern": r"""(?:model\.predict|pipeline)\s*\([^)]*\).*(?:production|deploy|serve)(?!.*(?:bias_monitor|fairness_monitor|drift|disparity))""",
+        "description": "Production inference without continuous bias monitoring allows discriminatory drift over time.",
+        "cwe": "CWE-693", "recommendation": "Implement continuous bias monitoring in production. Set alert thresholds for disparity metrics.",
+        "compliance": ["EU-AI-ACT-HIGH", "NIST-AI-RMF-MEASURE"],
+    },
+]
+
+# ---------------------------------------------------------------------------
+# YAML / CONFIG RULES — K8S AI WORKLOADS (KServe, Seldon, Triton)  [v1.1.0]
+# ---------------------------------------------------------------------------
+K8S_AI_RULES: list[dict[str, Any]] = [
+    {
+        "id": "AISPM-K8S-AI-001", "category": "K8s AI Workloads", "severity": "HIGH",
+        "name": "KServe InferenceService without authentication",
+        "pattern": r"""(?:kind:\s*InferenceService|serving\.kserve\.io)(?!.*(?:auth|istio.*auth|security|token))""",
+        "description": "KServe InferenceService deployed without authentication exposes model endpoints to unauthorised access.",
+        "cwe": "CWE-306", "recommendation": "Enable Istio authentication or KServe auth predictor. Apply network policies to restrict access.",
+        "compliance": ["NIST-AI-RMF-MANAGE", "ATLAS-INIT-ACCESS"],
+    },
+    {
+        "id": "AISPM-K8S-AI-002", "category": "K8s AI Workloads", "severity": "MEDIUM",
+        "name": "Seldon deployment without resource limits",
+        "pattern": r"""(?:kind:\s*SeldonDeployment|machinelearning\.seldon\.io)(?!.*(?:resources|limits|requests))""",
+        "description": "Seldon model deployment without resource limits can exhaust cluster resources.",
+        "cwe": "CWE-770", "recommendation": "Set CPU, memory, and GPU resource requests and limits on all Seldon containers.",
+        "compliance": ["NIST-AI-RMF-MANAGE"],
+    },
+    {
+        "id": "AISPM-K8S-AI-003", "category": "K8s AI Workloads", "severity": "HIGH",
+        "name": "GPU pod without security context constraints",
+        "pattern": r"""nvidia\.com/gpu.*(?:(?!securityContext|readOnlyRootFilesystem|runAsNonRoot).)*$""",
+        "description": "GPU pods without security context constraints run with excessive privileges.",
+        "cwe": "CWE-250", "recommendation": "Apply securityContext with runAsNonRoot, readOnlyRootFilesystem, and drop ALL capabilities.",
+        "compliance": ["NIST-AI-RMF-MANAGE"],
+    },
+    {
+        "id": "AISPM-K8S-AI-004", "category": "K8s AI Workloads", "severity": "MEDIUM",
+        "name": "Model serving container with writable root filesystem",
+        "pattern": r"""(?:triton|torchserve|tensorflow.serving|vllm|ollama).*(?:readOnlyRootFilesystem:\s*false|(?!readOnlyRootFilesystem))""",
+        "description": "Model serving container with writable filesystem allows attackers to modify model files or inject code.",
+        "cwe": "CWE-732", "recommendation": "Set readOnlyRootFilesystem: true. Mount model files as read-only volumes.",
+        "compliance": ["NIST-AI-RMF-MANAGE"],
+    },
+    {
+        "id": "AISPM-K8S-AI-005", "category": "K8s AI Workloads", "severity": "MEDIUM",
+        "name": "Triton/TorchServe metrics endpoint exposed externally",
+        "pattern": r"""(?:triton|torchserve).*(?:metrics|prometheus|8002|8082).*(?:NodePort|LoadBalancer|Ingress)""",
+        "description": "Model serving metrics endpoint exposed externally leaks model performance data and aids reconnaissance.",
+        "cwe": "CWE-200", "recommendation": "Restrict metrics endpoints to ClusterIP. Use internal monitoring tools to scrape metrics.",
+        "compliance": ["ATLAS-RECON", "NIST-AI-RMF-MANAGE"],
+    },
+]
+
+# ---------------------------------------------------------------------------
+# TERRAFORM / IaC RULES — AI SERVICES  [v1.1.0]
+# ---------------------------------------------------------------------------
+TERRAFORM_AI_RULES: list[dict[str, Any]] = [
+    {
+        "id": "AISPM-IAC-001", "category": "Terraform AI IaC", "severity": "HIGH",
+        "name": "SageMaker endpoint without VPC or encryption",
+        "pattern": r"""(?:aws_sagemaker_endpoint|aws_sagemaker_notebook)(?!.*(?:vpc|subnet|kms_key|encryption))""",
+        "description": "AWS SageMaker endpoint deployed without VPC isolation or KMS encryption.",
+        "cwe": "CWE-311", "recommendation": "Deploy SageMaker endpoints in VPC with private subnets. Enable KMS encryption for data at rest and in transit.",
+        "compliance": ["NIST-AI-RMF-MANAGE", "EU-AI-ACT-HIGH"],
+    },
+    {
+        "id": "AISPM-IAC-002", "category": "Terraform AI IaC", "severity": "HIGH",
+        "name": "Bedrock model access without IAM restrictions",
+        "pattern": r"""(?:aws_bedrock|bedrock).*(?:policy|access).*(?:\*|Allow)(?!.*(?:Condition|StringEquals|IpAddress))""",
+        "description": "AWS Bedrock model access policy without IAM conditions allows overly broad access to AI models.",
+        "cwe": "CWE-732", "recommendation": "Apply least-privilege IAM policies with conditions (source IP, tags, resource ARN).",
+        "compliance": ["NIST-AI-RMF-MANAGE", "EU-AI-ACT-HIGH"],
+    },
+    {
+        "id": "AISPM-IAC-003", "category": "Terraform AI IaC", "severity": "HIGH",
+        "name": "Vertex AI notebook without private networking",
+        "pattern": r"""(?:google_notebooks_instance|google_vertex_ai)(?!.*(?:no_public_ip|private|internal|vpc))""",
+        "description": "Google Vertex AI notebook instance deployed with public IP, exposing interactive compute to the internet.",
+        "cwe": "CWE-668", "recommendation": "Set no_public_ip = true. Deploy in VPC with Private Google Access.",
+        "compliance": ["NIST-AI-RMF-MANAGE"],
+    },
+    {
+        "id": "AISPM-IAC-004", "category": "Terraform AI IaC", "severity": "MEDIUM",
+        "name": "Azure OpenAI without managed identity (key-based auth)",
+        "pattern": r"""(?:azurerm_cognitive_account|azure_openai).*(?:key|api_key|access_key)(?!.*(?:managed_identity|identity|system_assigned))""",
+        "description": "Azure OpenAI using key-based authentication instead of managed identity increases credential exposure risk.",
+        "cwe": "CWE-798", "recommendation": "Use Azure Managed Identity for authentication. Avoid storing API keys.",
+        "compliance": ["NIST-AI-RMF-GOVERN"],
+    },
+    {
+        "id": "AISPM-IAC-005", "category": "Terraform AI IaC", "severity": "CRITICAL",
+        "name": "Cloud model/training data bucket publicly accessible",
+        "pattern": r"""(?:aws_s3_bucket|google_storage_bucket|azurerm_storage_container).*(?:model|training|dataset|ml-data).*(?:public|acl\s*=\s*['\"]public|allUsers|anonymous)""",
+        "description": "Cloud storage bucket containing models or training data is publicly accessible.",
+        "cwe": "CWE-732", "recommendation": "Block public access on all AI data buckets. Use IAM policies and VPC endpoints for access.",
+        "compliance": ["NIST-AI-RMF-MANAGE", "OWASP-ML-05", "ATLAS-EXFIL"],
+    },
+]
+
+# ---------------------------------------------------------------------------
 # .env FILE RULES
 # ---------------------------------------------------------------------------
 ENV_RULES: list[dict[str, Any]] = [
@@ -952,6 +1367,17 @@ AI_VULNERABLE_PACKAGES: list[dict[str, Any]] = [
     {"package": "scikit-learn",  "cve": "CVE-2020-28975", "severity": "MEDIUM",   "fixed": "0.24.0",  "desc": "Denial of service via crafted pickle model"},
     {"package": "pillow",        "cve": "CVE-2023-44271", "severity": "HIGH",     "fixed": "10.0.0",  "desc": "Denial of service via large image decompression"},
     {"package": "fastapi",       "cve": "CVE-2024-24762", "severity": "HIGH",     "fixed": "0.109.1", "desc": "DoS via multipart content-type header parsing"},
+    # v1.1.0 additions
+    {"package": "chromadb",      "cve": "CVE-2024-3095",  "severity": "HIGH",     "fixed": "0.4.0",   "desc": "Path traversal in collection operations"},
+    {"package": "instructor",    "cve": "CVE-2024-3772",  "severity": "MEDIUM",   "fixed": "0.6.0",   "desc": "Information leakage via verbose error messages"},
+    {"package": "bentoml",       "cve": "CVE-2024-2912",  "severity": "CRITICAL", "fixed": "1.2.5",   "desc": "Remote code execution via pickle deserialization"},
+    {"package": "lm-format-enforcer", "cve": "CVE-2024-1455", "severity": "HIGH", "fixed": "0.9.0",   "desc": "ReDoS via crafted regex patterns"},
+    {"package": "ollama",        "cve": "CVE-2024-39720", "severity": "HIGH",     "fixed": "0.1.47",  "desc": "Path traversal leading to arbitrary file read"},
+    {"package": "ollama",        "cve": "CVE-2024-39722", "severity": "HIGH",     "fixed": "0.1.46",  "desc": "Information disclosure of model files via API"},
+    {"package": "jupyter-server","cve": "CVE-2024-35178", "severity": "HIGH",     "fixed": "2.14.1",  "desc": "Authentication bypass via crafted URL"},
+    {"package": "dspy-ai",       "cve": "CVE-2024-4160",  "severity": "MEDIUM",   "fixed": "2.4.0",   "desc": "Prompt injection via template manipulation"},
+    {"package": "label-studio",  "cve": "CVE-2024-26152", "severity": "CRITICAL", "fixed": "1.11.0",  "desc": "Server-side request forgery via data import"},
+    {"package": "paddlepaddle",  "cve": "CVE-2024-0917",  "severity": "CRITICAL", "fixed": "2.6.0",   "desc": "Remote code execution via pickle in paddle.load"},
 ]
 
 # NPM AI packages with CVEs
@@ -985,7 +1411,7 @@ class Finding:
 # SCANNER CLASS
 # ---------------------------------------------------------------------------
 class AISPMScanner:
-    """AI Security Posture Management Scanner v1.0.0"""
+    """AI Security Posture Management Scanner v1.1.0"""
 
     SKIP_DIRS = {
         ".git", ".svn", ".hg", "node_modules", "__pycache__", ".tox",
@@ -1007,7 +1433,10 @@ class AISPMScanner:
     ENV_EXTENSIONS = {".env"}
     CONFIG_EXTENSIONS = {".yaml", ".yml", ".toml"}
     DOCKER_NAMES = {"Dockerfile", "dockerfile", "Containerfile"}
+    TF_EXTENSIONS = {".tf"}
     NOTEBOOK_EXTENSION = ".ipynb"
+    MODEL_CARD_NAMES = {"MODEL_CARD.md", "model_card.md", "MODEL-CARD.md",
+                        "model-card.md", "MODELCARD.md", "modelcard.md"}
     REQUIREMENTS_FILES = {"requirements.txt", "requirements-dev.txt", "requirements-ml.txt",
                           "requirements-ai.txt", "requirements_ai.txt", "requirements_ml.txt",
                           "constraints.txt"}
@@ -1070,8 +1499,10 @@ class AISPMScanner:
     def _detect_ai_inventory(self, line: str) -> None:
         # Frameworks
         for fw in ("tensorflow", "keras", "torch", "pytorch", "transformers",
-                    "langchain", "llamaindex", "llama_index", "autogen",
-                    "crewai", "haystack", "semantic_kernel"):
+                    "langchain", "langgraph", "llamaindex", "llama_index",
+                    "autogen", "crewai", "haystack", "semantic_kernel",
+                    "dspy", "instructor", "peft", "trl", "bentoml",
+                    "gradio", "streamlit", "chainlit"):
             if fw in line.lower():
                 self._ai_inventory["frameworks"].add(fw)
         # Models
@@ -1110,11 +1541,91 @@ class AISPMScanner:
         return self.findings
 
     def _scan_directory(self, root: str) -> None:
+        self._check_model_card(root)
         for dirpath, dirnames, filenames in os.walk(root):
             dirnames[:] = [d for d in dirnames if d not in self.SKIP_DIRS]
             for fname in filenames:
                 fpath = os.path.join(dirpath, fname)
                 self._dispatch_file(fpath)
+
+    # -----------------------------------------------------------------------
+    # MODEL CARD / DOCUMENTATION COMPLIANCE  [v1.1.0]
+    # -----------------------------------------------------------------------
+    def _check_model_card(self, root: str) -> None:
+        """Check for AI documentation compliance at project root."""
+        has_model_card = False
+        for name in self.MODEL_CARD_NAMES:
+            if os.path.isfile(os.path.join(root, name)):
+                has_model_card = True
+                break
+
+        # Check if this looks like an AI project (has Python/ML files)
+        is_ai_project = False
+        for dirpath, dirnames, filenames in os.walk(root):
+            dirnames[:] = [d for d in dirnames if d not in self.SKIP_DIRS]
+            for fname in filenames:
+                if fname.endswith((".py", ".ipynb")):
+                    fpath = os.path.join(dirpath, fname)
+                    try:
+                        with open(fpath, encoding="utf-8", errors="replace") as fh:
+                            sample = fh.read(4096)
+                        if any(kw in sample.lower() for kw in
+                               ("import torch", "import tensorflow", "from transformers",
+                                "import openai", "import anthropic", "langchain",
+                                "model.predict", "model.generate", "fine_tune",
+                                "from sklearn", "import keras")):
+                            is_ai_project = True
+                            break
+                    except OSError:
+                        pass
+            if is_ai_project:
+                break
+
+        if is_ai_project and not has_model_card:
+            doc_rules = [
+                {
+                    "id": "AISPM-DOC-001", "category": "Model Card Compliance", "severity": "MEDIUM",
+                    "name": "No model card file in project",
+                    "pattern": "", "cwe": "CWE-1059",
+                    "description": "AI project has no MODEL_CARD.md documenting the model's intended use, limitations, and risks. Required by EU AI Act for high-risk systems.",
+                    "recommendation": "Create a MODEL_CARD.md with: model description, intended use, out-of-scope use, training data, evaluation results, ethical considerations, and limitations.",
+                    "compliance": ["EU-AI-ACT-HIGH", "EU-AI-ACT-GPAI", "NIST-AI-RMF-GOVERN", "NIST-AI-RMF-MAP"],
+                },
+                {
+                    "id": "AISPM-DOC-002", "category": "Model Card Compliance", "severity": "MEDIUM",
+                    "name": "No AI system risk classification documented",
+                    "pattern": "", "cwe": "CWE-1059",
+                    "description": "AI project lacks risk classification documentation required by EU AI Act.",
+                    "recommendation": "Document the AI system's risk level (unacceptable/high/limited/minimal) and justify the classification.",
+                    "compliance": ["EU-AI-ACT-HIGH", "NIST-AI-RMF-MAP"],
+                },
+                {
+                    "id": "AISPM-DOC-003", "category": "Model Card Compliance", "severity": "LOW",
+                    "name": "No intended use or out-of-scope use documentation",
+                    "pattern": "", "cwe": "CWE-1059",
+                    "description": "AI project lacks documentation of intended and out-of-scope use cases.",
+                    "recommendation": "Document intended use cases, known limitations, and explicitly list out-of-scope or prohibited uses.",
+                    "compliance": ["EU-AI-ACT-HIGH", "NIST-AI-RMF-MAP"],
+                },
+                {
+                    "id": "AISPM-DOC-004", "category": "Model Card Compliance", "severity": "LOW",
+                    "name": "No training data documentation",
+                    "pattern": "", "cwe": "CWE-1059",
+                    "description": "AI project lacks training data documentation covering sources, preprocessing, and potential biases.",
+                    "recommendation": "Document training data sources, preprocessing steps, demographic representation, and known biases.",
+                    "compliance": ["EU-AI-ACT-HIGH", "NIST-AI-RMF-MAP", "NIST-AI-RMF-MEASURE"],
+                },
+                {
+                    "id": "AISPM-DOC-005", "category": "Model Card Compliance", "severity": "LOW",
+                    "name": "No performance metrics or evaluation results documented",
+                    "pattern": "", "cwe": "CWE-1059",
+                    "description": "AI project lacks performance evaluation documentation.",
+                    "recommendation": "Document evaluation metrics, benchmark results, and performance across demographic subgroups.",
+                    "compliance": ["EU-AI-ACT-HIGH", "NIST-AI-RMF-MEASURE"],
+                },
+            ]
+            for rule in doc_rules:
+                self._add(rule, root, 0, "No MODEL_CARD.md found")
 
     def _dispatch_file(self, fpath: str) -> None:
         fname = os.path.basename(fpath)
@@ -1130,6 +1641,8 @@ class AISPMScanner:
                 self._scan_env(fpath)
             elif ext in self.CONFIG_EXTENSIONS:
                 self._scan_config(fpath)
+            elif ext in self.TF_EXTENSIONS:
+                self._scan_terraform(fpath)
             elif fname in self.DOCKER_NAMES or fname.endswith(".dockerfile"):
                 self._scan_docker(fpath)
             elif fname in self.REQUIREMENTS_FILES or (fname.startswith("requirements") and fname.endswith(".txt")):
@@ -1162,7 +1675,11 @@ class AISPMScanner:
                      DATA_PIPELINE_RULES + PRIVACY_RULES +
                      GUARDRAIL_RULES + AGENT_SECURITY_RULES +
                      RAG_SECURITY_RULES + SECRET_RULES +
-                     SHADOW_AI_RULES + INFRA_RULES)
+                     SHADOW_AI_RULES + INFRA_RULES +
+                     MCP_SECURITY_RULES + AGENT_FRAMEWORK_RULES +
+                     FINETUNE_SECURITY_RULES + MULTIMODAL_SECURITY_RULES +
+                     OBSERVABILITY_RULES + GATEWAY_RULES +
+                     BIAS_FAIRNESS_RULES)
 
         self._sast_scan(fpath, lines, all_rules)
 
@@ -1208,7 +1725,19 @@ class AISPMScanner:
                 lines = fh.readlines()
         except OSError:
             return
-        self._sast_scan(fpath, lines, CONFIG_RULES)
+        self._sast_scan(fpath, lines, CONFIG_RULES + K8S_AI_RULES)
+
+    # -----------------------------------------------------------------------
+    # TERRAFORM (.tf) SCANNING  [v1.1.0]
+    # -----------------------------------------------------------------------
+    def _scan_terraform(self, fpath: str) -> None:
+        self._vprint(f"Scanning Terraform: {fpath}")
+        try:
+            with open(fpath, encoding="utf-8", errors="replace") as fh:
+                lines = fh.readlines()
+        except OSError:
+            return
+        self._sast_scan(fpath, lines, TERRAFORM_AI_RULES)
 
     # -----------------------------------------------------------------------
     # DOCKERFILE SCANNING
@@ -1374,7 +1903,11 @@ class AISPMScanner:
                      DATA_PIPELINE_RULES + PRIVACY_RULES +
                      GUARDRAIL_RULES + AGENT_SECURITY_RULES +
                      RAG_SECURITY_RULES + SECRET_RULES +
-                     SHADOW_AI_RULES + INFRA_RULES)
+                     SHADOW_AI_RULES + INFRA_RULES +
+                     MCP_SECURITY_RULES + AGENT_FRAMEWORK_RULES +
+                     FINETUNE_SECURITY_RULES + MULTIMODAL_SECURITY_RULES +
+                     OBSERVABILITY_RULES + GATEWAY_RULES +
+                     BIAS_FAIRNESS_RULES)
         for cell in cells:
             if cell.get("cell_type") == "code":
                 source = cell.get("source", [])

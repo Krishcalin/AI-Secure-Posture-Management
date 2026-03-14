@@ -156,3 +156,57 @@ app.run(host="0.0.0.0", port=8080)
 
 # AISPM-INFRA-007: CORS wildcard
 CORS(app, origins="*")
+
+# ---- MCP SECURITY (v1.1.0) ----
+# AISPM-MCP-001: MCP server without auth
+from mcp import Server
+mcp_server = mcp.Server("my-tools")
+
+# AISPM-MCP-002: MCP tool with shell access
+@mcp.tool
+def run_command(cmd): return subprocess.run(cmd, shell=True)
+
+# AISPM-MCP-003: MCP over HTTP
+transport = SSEServerTransport(port=8080)
+
+# AISPM-MCP-005: Auto-approve
+mcp_client = McpClient(auto_approve=True)
+
+# ---- AGENT FRAMEWORK SPECIFIC (v1.1.0) ----
+# AISPM-AGENT-007: CrewAI delegation
+crew_agent = Agent(role="researcher", allow_delegation=True)
+
+# AISPM-AGENT-008: AutoGen code execution without Docker
+code_execution_config = {"work_dir": "/tmp", "last_n_messages": 3}
+
+# AISPM-AGENT-010: Agent memory without encryption
+memory = ConversationBufferMemory(persist=True, db_path="/data/memory.db")
+
+# ---- FINE-TUNING SECURITY (v1.1.0) ----
+# AISPM-FINETUNE-001: Fine-tune on user uploads
+SFTTrainer(model=base_model, train_dataset=user_data)
+
+# AISPM-FINETUNE-002: LoRA from untrusted source
+PeftModel.from_pretrained(base_model, "evil-org/lora-adapter", trust_remote_code=True)
+
+# AISPM-FINETUNE-004: RLHF reward model
+reward = RewardModel(model_name="reward-v1")
+dpo = DPOTrainer(model=base_model, ref_model=ref_model)
+
+# ---- MULTIMODAL SECURITY (v1.1.0) ----
+# AISPM-MULTI-001: Image without validation
+img = Image.open(request.files["image"])
+
+# AISPM-MULTI-004: No NSFW filter
+pipe = StableDiffusion(model_id="sd-v1.5")
+
+# AISPM-MULTI-005: Generated media without watermark
+output = generate(image=input_img, style="artistic")
+
+# ---- AI BIAS & FAIRNESS (v1.1.0) ----
+# AISPM-FAIR-002: Protected attributes as features
+features = ["income", "education", "race", "gender", "credit_score"]
+
+# ---- AI GATEWAY (v1.1.0) ----
+# AISPM-GW-001: Direct client instantiation
+client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
