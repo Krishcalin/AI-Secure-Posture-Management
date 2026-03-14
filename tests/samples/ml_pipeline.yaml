@@ -1,0 +1,31 @@
+# Intentionally vulnerable ML pipeline config for AI-SPM testing
+apiVersion: kubeflow.org/v1
+kind: Experiment
+metadata:
+  name: ml-training-pipeline
+spec:
+  template:
+    spec:
+      containers:
+        - name: trainer
+          image: pytorch/pytorch:latest
+          securityContext:
+            privileged: true
+            runAsUser: 0
+          resources: {}
+          env:
+            - name: MODEL_ENDPOINT
+              value: "http://internal:8080"
+      volumes:
+        - name: training-data
+          hostPath:
+            path: /tmp/shared-data
+
+# Pipeline settings
+model_registry: http://mlflow-server:5000
+data_path: "/tmp/training_data"
+gpu_sharing: shared
+safety: disabled
+guardrails: false
+telemetry: true
+replicas: 4
